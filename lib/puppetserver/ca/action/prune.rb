@@ -1,6 +1,7 @@
 require 'optparse'
 require 'openssl'
 require 'set'
+require 'puppetserver/ca/utils/signing_digest'
 require 'puppetserver/ca/errors'
 require 'puppetserver/ca/utils/cli_parsing'
 require 'puppetserver/ca/utils/file_system'
@@ -158,7 +159,7 @@ BANNER
             end
           end
 
-          crl.sign(pkey, OpenSSL::Digest::SHA256.new)
+          crl.sign(pkey, SigningDigest.for_key(pkey, OpenSSL::Digest::SHA256.new))
         end
 
         def prune_using_serial(crl, key, serialnumbers)

@@ -89,10 +89,10 @@ BANNER
             [settings[:cadir] + '/infra_crl.pem', loader.crls],
             [settings[:localcacert], loader.certs],
             [settings[:hostcrl], loader.crls],
-            [settings[:hostpubkey], server_key.public_key],
+            [settings[:hostpubkey], server_key.respond_to?(:public_key) ? server_key.public_key : server_key.public_to_pem],
             [settings[:hostcert], server_cert],
             [settings[:cert_inventory], ca.inventory_entry(server_cert)],
-            [settings[:capub], loader.key.public_key],
+            [settings[:capub], loader.key.respond_to?(:public_key) ? loader.key.public_key : loader.key.public_to_pem],
             [settings[:cadir] + '/infra_inventory.txt', ''],
             [settings[:cadir] + '/infra_serials', ''],
             [settings[:serial], "002"],
@@ -100,8 +100,8 @@ BANNER
           ]
 
           private_files = [
-            [settings[:hostprivkey], server_key],
-            [settings[:cakey], loader.key],
+            [settings[:hostprivkey], server_key.respond_to?(:to_pem) ? server_key : server_key.private_to_pem],
+            [settings[:cakey], loader.key.respond_to?(:to_pem) ? loader.key : loader.key.private_to_pem],
           ]
 
           files_to_check = public_files + private_files

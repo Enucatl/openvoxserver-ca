@@ -170,13 +170,16 @@ module Puppetserver
           add_subject_alt_names_extension(alt_names, cert, ef)
         end
 
-        cert.sign(@key, @digest)
+        cert.sign(@key, Utils::SigningDigest.for_key(@key, @digest))
 
         cert
       end
 
       def add_authorized_extensions(cert, ef)
         SERVER_EXTENSIONS.each do |ext|
+          if ext.first == 'keyUsage' && Utils::SigningDigest.mldsa44?(cert.public_key)
+            ext = ['keyUsage', 'digitalSignature', true]
+          end
           extension = ef.create_extension(*ext)
           cert.add_extension(extension)
         end
@@ -217,7 +220,7 @@ module Puppetserver
       def self_signed_ca(key)
         cert = OpenSSL::X509::Certificate.new
 
-        cert.public_key = key.public_key
+        cert.public_key = key
         cert.subject = OpenSSL::X509::Name.new([["CN", @settings[:root_ca_name]]])
         cert.issuer = cert.subject
         cert.version = 2
@@ -232,7 +235,7 @@ module Puppetserver
           cert.add_extension(extension)
         end
 
-        cert.sign(key, @digest)
+        cert.sign(key, Utils::SigningDigest.for_key(key, @digest))
 
         cert
       end
@@ -250,7 +253,7 @@ module Puppetserver
 
         crl.last_update = CERT_VALID_FROM
         crl.next_update = valid_until
-        crl.sign(key, @digest)
+        crl.sign(key, Utils::SigningDigest.for_key(key, @digest))
 
         # FIXME: Workaround a bug in jruby-openssl. Without this, #to_pem return an invalid CRL:
         # ----BEGIN X509 CRL-----
@@ -291,7 +294,7 @@ module Puppetserver
           cert.add_extension(extension)
         end
 
-        cert.sign(ca_key, @digest)
+        cert.sign(ca_key, Utils::SigningDigest.for_key(ca_key, @digest))
 
         cert
       end

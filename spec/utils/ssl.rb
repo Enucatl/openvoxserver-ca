@@ -1,6 +1,7 @@
 require 'openssl'
 require 'fileutils'
 require 'puppetserver/ca/utils/config'
+require 'puppetserver/ca/utils/signing_digest'
 
 module Utils
   module SSL
@@ -11,7 +12,7 @@ module Utils
       signer_cert ||= cert
       signer_key ||= subject_key
 
-      cert.public_key = subject_key.public_key
+      cert.public_key = subject_key
       cert.subject = OpenSSL::X509::Name.parse("/CN=#{name}")
       cert.issuer = signer_cert.subject
       cert.version = 2
@@ -32,7 +33,7 @@ module Utils
         cert.add_extension(extension)
       end
 
-      cert.sign(signer_key, OpenSSL::Digest::SHA256.new)
+      cert.sign(signer_key, Puppetserver::Ca::Utils::SigningDigest.for_key(signer_key, OpenSSL::Digest::SHA256.new))
 
       return cert
     end
@@ -63,7 +64,7 @@ module Utils
                                      OpenSSL::ASN1::Integer(certs_to_revoke.length)))
       crl.last_update = Time.now - 1
       crl.next_update = Time.now + 360000
-      crl.sign(key, OpenSSL::Digest::SHA256.new)
+      crl.sign(key, Puppetserver::Ca::Utils::SigningDigest.for_key(key, OpenSSL::Digest::SHA256.new))
 
       # FIXME: Workaround a bug in jruby-openssl. Without this, #to_pem return an invalid CRL:
       # ----BEGIN X509 CRL-----

@@ -27,6 +27,27 @@ To import a custom CA:
 puppetserver ca import --cert-bundle certs.pem --crl-chain crls.pem --private-key ca_key.pem
 ```
 
+For an ML-DSA-44 import, first place an ML-DSA-44 private key and its public PEM
+at the configured `hostprivkey` and `hostpubkey` paths. Both files must exist;
+without them, server key generation retains its RSA default. For example, after
+creating the configured key directories:
+
+```sh
+/opt/puppetlabs/puppet/bin/ruby -ropenssl -e '
+  key = OpenSSL::PKey.generate_key("ML-DSA-44")
+  File.open(ARGV[0], "wx", 0640) { |file| file.write(key.private_to_pem) }
+  File.open(ARGV[1], "wx", 0644) { |file| file.write(key.public_to_pem) }
+' HOSTPRIVKEY HOSTPUBKEY
+```
+
+Then run `ca import` with `--config puppet.conf`, the ML-DSA-44 subordinate private
+key, its certificate chain, and the issuer CRL chain. Set `ca_ttl` within the
+issuer's remaining lifetime. Existing CA output files and `hostcert` cause import
+to refuse replacement; existing server key pairs are preserved. Import writes a
+leaf-only `hostcert`, so configure the TLS server to send its issuer chain too.
+This path was tested with bundled Ruby 4.0.7, Ruby OpenSSL 4.0.2 and OpenSSL 3.5.9;
+the running server also needs a compatible ML-DSA TLS provider.
+
 The remaining actions provided by this gem require a running OpenVox Server (Puppet Server), since
 it primarily uses the CA's API endpoints to do its work. The following examples
 assume that you are using the gem packaged within OpenVox Server.

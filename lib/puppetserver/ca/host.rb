@@ -1,6 +1,7 @@
 require 'fileutils'
 require 'openssl'
 require 'yaml'
+require 'puppetserver/ca/utils/signing_digest'
 
 module Puppetserver
   module Ca
@@ -78,7 +79,8 @@ module Puppetserver
 
       def create_csr(name:, key:, cli_extensions: [], csr_attributes_path: '')
         csr = OpenSSL::X509::Request.new
-        csr.public_key = key.public_key
+        csr.version = 0
+        csr.public_key = key
         csr.subject = OpenSSL::X509::Name.new([["CN", name]])
 
         custom_attributes = get_custom_attributes(csr_attributes_path)
@@ -87,7 +89,7 @@ module Puppetserver
         add_csr_attributes(csr, custom_attributes)
         add_csr_extensions(csr, extension_requests, cli_extensions)
 
-        csr.sign(key, @digest) if @errors.empty?
+        csr.sign(key, Utils::SigningDigest.for_key(key, @digest)) if @errors.empty?
 
         csr
       end
