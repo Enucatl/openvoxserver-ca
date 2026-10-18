@@ -63,10 +63,21 @@ module Puppetserver
       # to honor them here, if only one key exists we want to surface an error,
       # and if neither exist we generate a new key. This logic is necessary for
       # proper bootstrapping for certain server workflows.
-      def create_private_key(keylength, private_path = '', public_path = '')
+      def create_private_key(keylength, private_path = '', public_path = '', key_type: 'rsa')
         if File.exist?(private_path) && File.exist?(public_path)
-          return OpenSSL::PKey.read(File.read(private_path))
+          key = OpenSSL::PKey.read(File.read(private_path))
+          if key_type == 'mldsa44' && !Utils::SigningDigest.mldsa44?(key)
+            @errors << "Existing server key at #{private_path} is not ML-DSA-44; refusing to replace it."
+            return nil
+          end
+          return key
         elsif !File.exist?(private_path) && !File.exist?(public_path)
+          if key_type == 'mldsa44'
+            unless OpenSSL::PKey.respond_to?(:generate_key)
+              raise OpenSSL::PKey::PKeyError, 'ML-DSA-44 requires native Ruby OpenSSL with ML-DSA support'
+            end
+            return OpenSSL::PKey.generate_key('ML-DSA-44')
+          end
           return OpenSSL::PKey::RSA.new(keylength)
         elsif !File.exist?(private_path) && File.exist?(public_path)
           @errors << "Missing private key to match public key at #{public_path}"

@@ -39,10 +39,11 @@ module Puppetserver
 
       attr_reader :cert, :cert_bundle, :key, :crl, :crl_chain
 
-      def initialize(digest, settings)
+      def initialize(digest, settings, key_type: 'rsa')
         @digest = digest
         @host = Host.new(digest)
         @settings = settings
+        @key_type = key_type
         @errors = []
 
         if ssl_assets_exist?
@@ -136,7 +137,7 @@ module Puppetserver
         server_cert = nil
         server_key = @host.create_private_key(@settings[:keylength],
                                               @settings[:hostprivkey],
-                                              @settings[:hostpubkey])
+                                              @settings[:hostpubkey], key_type: @key_type)
         if server_key
           server_csr = @host.create_csr(name: @settings[:certname], key: server_key)
           if @settings[:subject_alt_names].empty?
@@ -210,7 +211,7 @@ module Puppetserver
       end
 
       def create_root_cert
-        root_key = @host.create_private_key(@settings[:keylength])
+        root_key = @host.create_private_key(@settings[:keylength], key_type: @key_type)
         root_cert = self_signed_ca(root_key)
         root_crl = create_crl_for(root_cert, root_key)
 
@@ -268,7 +269,7 @@ module Puppetserver
       end
 
       def create_intermediate_cert(root_key, root_cert)
-        @key = @host.create_private_key(@settings[:keylength])
+        @key = @host.create_private_key(@settings[:keylength], key_type: @key_type)
         int_csr = @host.create_csr(name: @settings[:ca_name], key: @key)
         @cert = sign_intermediate(root_key, root_cert, int_csr)
         @crl = create_crl_for(@cert, @key)

@@ -20,11 +20,15 @@ Usage:
   puppetserver ca setup [--help]
   puppetserver ca setup [--config PATH] [--subject-alt-names NAME[,NAME]]
                            [--certname NAME] [--ca-name NAME] [--root-ca-name NAME]
+                           [--key-type rsa|mldsa44]
 
 Description:
   Setup a root and intermediate signing CA for Puppet Server
   and store generated CA keys, certs, crls, and associated
   server related files on disk.
+
+  RSA is the default. ML-DSA-44 requires native Ruby OpenSSL with OpenSSL 3.5
+  or later and a compatible TLS provider when starting Puppet Server.
 
   The `--subject-alt-names` flag can be used to add SANs to the
   certificate generated for the Puppet server. Multiple names can be
@@ -40,6 +44,12 @@ BANNER
         end
 
         def run(input)
+          key_type = input.fetch('key-type', 'rsa')
+          unless %w[rsa mldsa44].include?(key_type)
+            Errors.handle_with_usage(@logger, ['Key type must be rsa or mldsa44'])
+            return 1
+          end
+
           # Validate config_path provided
           config_path = input['config']
           if config_path
@@ -66,15 +76,15 @@ BANNER
 
           # Generate root and intermediate ca and put all the certificates, crls,
           # and keys where they should go.
-          errors = generate_pki(puppet.settings, signer.digest)
+          errors = generate_pki(puppet.settings, signer.digest, key_type: key_type)
           return 1 if Errors.handle_with_usage(@logger, errors)
 
           @logger.inform "Generation succeeded. Find your files in #{puppet.settings[:cadir]}"
           return 0
         end
 
-        def generate_pki(settings, signing_digest)
-          ca = Puppetserver::Ca::LocalCertificateAuthority.new(signing_digest, settings)
+        def generate_pki(settings, signing_digest, key_type: 'rsa')
+          ca = Puppetserver::Ca::LocalCertificateAuthority.new(signing_digest, settings, key_type: key_type)
 
           root_key, root_cert, root_crl = ca.create_root_cert
           ca.create_intermediate_cert(root_key, root_cert)
@@ -95,8 +105,8 @@ BANNER
             [settings[:hostcert], server_cert],
             [settings[:localcacert], [ca.cert, root_cert]],
             [settings[:hostcrl], [ca.crl, root_crl]],
-            [settings[:hostpubkey], server_key.public_key],
-            [settings[:capub], ca.key.public_key],
+            [settings[:hostpubkey], server_key.respond_to?(:public_key) ? server_key.public_key : server_key.public_to_pem],
+            [settings[:capub], ca.key.respond_to?(:public_key) ? ca.key.public_key : ca.key.public_to_pem],
             [settings[:cert_inventory], ca.inventory_entry(server_cert)],
             [settings[:cadir] + '/infra_inventory.txt', ''],
             [settings[:cadir] + '/infra_serials', ''],
@@ -105,9 +115,9 @@ BANNER
           ]
 
           private_files = [
-            [settings[:hostprivkey], server_key],
-            [settings[:rootkey], root_key],
-            [settings[:cakey], ca.key],
+            [settings[:hostprivkey], server_key.respond_to?(:to_pem) ? server_key : server_key.private_to_pem],
+            [settings[:rootkey], root_key.respond_to?(:to_pem) ? root_key : root_key.private_to_pem],
+            [settings[:cakey], ca.key.respond_to?(:to_pem) ? ca.key : ca.key.private_to_pem],
           ]
 
           files_to_check = public_files + private_files
@@ -140,6 +150,8 @@ ERR
           Puppetserver::Ca::Utils::Config.symlink_to_old_cadir(settings[:cadir], settings[:confdir])
 
           return []
+        rescue OpenSSL::OpenSSLError => e
+          return ["Unable to generate #{key_type} PKI: #{e.message}"]
         end
 
         def parse(cli_args)
@@ -156,6 +168,7 @@ ERR
           parsed['ca-name'] = ''
           parsed['root-ca-name'] = ''
           parsed['certname'] = ''
+          parsed['key-type'] = 'rsa'
           OptionParser.new do |opts|
             opts.banner = BANNER
             opts.on('--help', 'Display this command-specific help output') do |help|
@@ -163,6 +176,10 @@ ERR
             end
             opts.on('--config CONF', 'Path to puppet.conf') do |conf|
               parsed['config'] = conf
+            end
+            opts.on('--key-type TYPE', %w[rsa mldsa44],
+                    'Key type for the root, intermediate and server (rsa or mldsa44; default: rsa)') do |key_type|
+              parsed['key-type'] = key_type
             end
             opts.on('--subject-alt-names NAME[,NAME]',
                     'Subject alternative names for the server cert') do |sans|

@@ -22,6 +22,20 @@ To set up a default CA, with a self-signed root cert and an intermediate signing
 puppetserver ca setup
 ```
 
+To create an ML-DSA-44 root, intermediate signing CA, and server identity:
+```sh
+puppetserver ca setup --key-type mldsa44
+```
+
+The flag only affects this setup command; omitting it (or using `--key-type rsa`)
+retains RSA generation, regardless of an agent's `key_type` configuration.
+ML-DSA-44 requires native Ruby OpenSSL with OpenSSL 3.5 or later. Configure a
+compatible TLS provider separately before starting the server, and use capable
+agents with the new CA trust. Set agent `key_type = mldsa44` for new ML-DSA agent
+keys; existing identities are not migrated. Setup refuses to overwrite existing
+CA output files. Explicit ML-DSA setup also refuses an existing server key of a
+different type; it preserves an existing ML-DSA-44 pair.
+
 To import a custom CA:
 ```
 puppetserver ca import --cert-bundle certs.pem --crl-chain crls.pem --private-key ca_key.pem
